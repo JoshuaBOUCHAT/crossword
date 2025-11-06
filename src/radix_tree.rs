@@ -1,5 +1,21 @@
 use std::ops::{Index, IndexMut};
 
+use crate::explorer::ExploreState;
+
+#[derive(Debug)]
+pub struct TreeNode {
+    is_valide_word: bool,
+    branches: [u32; 26],
+}
+impl Default for TreeNode {
+    fn default() -> Self {
+        Self {
+            is_valide_word: false,
+            branches: [u32::MAX; 26],
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct RadixTree {
     nodes: Vec<TreeNode>,
@@ -15,6 +31,22 @@ impl Index<usize> for RadixTree {
 impl IndexMut<usize> for RadixTree {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.nodes[index]
+    }
+}
+#[inline]
+fn char_to_index(c: char) -> usize {
+    (c as u8 - b'a') as usize
+}
+pub fn validate_char(c: char) -> Result<char, String> {
+    match c {
+        c_lower_case @ 'a'..='z' => Ok(c_lower_case),
+        c_upper_case @ 'A'..='Z' => Ok(c_upper_case.to_ascii_lowercase()),
+        c => {
+            return Err(format!(
+                "The char you gave contain invalide character: {}",
+                c
+            ));
+        }
     }
 }
 
@@ -45,17 +77,8 @@ impl RadixTree {
     pub fn add_word(&mut self, word: &str) -> Result<(), String> {
         let mut actual = 0;
         for char in word.chars() {
-            let valide_char = match char {
-                c_lower_case @ 'a'..='z' => c_lower_case,
-                c_upper_case @ 'A'..='Z' => c_upper_case.to_ascii_lowercase(),
-                c => {
-                    return Err(format!(
-                        "The word you tried to insert:({}) contain invalide character: {}",
-                        word, c
-                    ));
-                }
-            };
-            let char_idx = (valide_char as u8 - b'a') as usize;
+            let valide_char = validate_char(char)?;
+            let char_idx = char_to_index(valide_char);
             actual = if self[actual].branches[char_idx] == u32::MAX {
                 let new_inserted_index = self.insert_node(TreeNode::default());
                 self[actual].branches[char_idx] = new_inserted_index as u32;
@@ -67,18 +90,15 @@ impl RadixTree {
         self[actual].is_valide_word = true;
         Ok(())
     }
-}
-
-#[derive(Debug)]
-pub struct TreeNode {
-    is_valide_word: bool,
-    branches: [u32; 26],
-}
-impl Default for TreeNode {
-    fn default() -> Self {
-        Self {
-            is_valide_word: false,
-            branches: [u32::MAX; 26],
+    pub fn explore_char_unchecked(&self, index: usize, explore_char: char) -> Option<ExploreState> {
+        let explore_char_index = char_to_index(explore_char);
+        if self[index].branches[explore_char_index] == u32::MAX {
+            return None;
         }
+        let index = self[index].branches[explore_char_index];
+        Some(ExploreState::new(
+            self[index as usize].is_valide_word,
+            index,
+        ))
     }
 }
