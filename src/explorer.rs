@@ -43,8 +43,7 @@ impl WordExplorer {
             self.word_state = new_state;
             self.inner_word.push(valide_char);
         } else {
-            self.word_state = ExploreState::default();
-            self.inner_word.clear();
+            self.flush();
             return ExplorerResult::Reset;
         }
 
@@ -56,5 +55,9 @@ impl WordExplorer {
     }
     pub fn get_word<'a>(&'a self) -> &'a str {
         &self.inner_word
+    }
+    pub fn flush(&mut self) {
+        self.word_state = ExploreState::default();
+        self.inner_word.clear();
     }
 }
