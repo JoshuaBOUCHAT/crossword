@@ -1,7 +1,7 @@
 use core::fmt;
 use std::ops::{Index, IndexMut};
 
-use crate::explorer::WordExplorer;
+use crate::{explorer::WordExplorer, radix_tree::RadixTree};
 
 #[derive(Debug)]
 pub struct CrosswordMatrix {
@@ -123,48 +123,52 @@ impl CrosswordMatrix {
         }
     }
 
-    pub fn solve(&self, explorer: &mut WordExplorer) -> Vec<String> {
+    pub fn solve(&self, tree: &RadixTree) -> Vec<String> {
         let mut result = vec![];
         let total_len = self.total_len;
         let h_len = self.h_len;
 
         for col in 0..self.h_len {
-            for row in 0..self.v_len {
+            let handle_row = |row| {
+                let mut row_explorer = WordExplorer::new(tree);
+                let exp_ref = &mut row_explorer;
+
                 let index = row * self.h_len + col;
 
                 //down
-                self.handle_parcours(explorer, &mut result, index, total_len, h_len, false);
+                self.handle_parcours(exp_ref, &mut result, index, total_len, h_len, false);
                 //right
                 let rg_stop = (row + 1) * self.h_len;
-                self.handle_parcours(explorer, &mut result, index, rg_stop, 1, false);
+                self.handle_parcours(exp_ref, &mut result, index, rg_stop, 1, false);
 
                 //left
-                self.handle_parcours(explorer, &mut result, row * h_len, index + 1, 1, true);
+                self.handle_parcours(exp_ref, &mut result, row * h_len, index + 1, 1, true);
 
                 //up
-                self.handle_parcours(explorer, &mut result, col, index + 1, h_len, true);
+                self.handle_parcours(exp_ref, &mut result, col, index + 1, h_len, true);
 
                 //staire down left right
                 let max_iter = (h_len - col - 1).min(self.v_len - row - 1);
                 let stop = index + max_iter * (self.h_len + 1) + 1;
 
-                self.handle_parcours(explorer, &mut result, index, stop, h_len + 1, false);
+                self.handle_parcours(exp_ref, &mut result, index, stop, h_len + 1, false);
 
                 //staire up right left
                 let max_iter = col.min(row);
                 let start = index - (self.h_len + 1) * max_iter;
-                self.handle_parcours(explorer, &mut result, start, index + 1, h_len + 1, true);
+                self.handle_parcours(exp_ref, &mut result, start, index + 1, h_len + 1, true);
 
                 //stair down right left
                 let max_iter = (self.v_len - 1 - row).min(col);
                 let stop = index + max_iter * (h_len - 1) + 1;
-                self.handle_parcours(explorer, &mut result, index, stop, h_len - 1, false);
+                self.handle_parcours(exp_ref, &mut result, index, stop, h_len - 1, false);
 
                 //staire up left right
                 let max_iter = (h_len - col).min(row);
                 let start = index - (h_len - 1) * max_iter;
-                self.handle_parcours(explorer, &mut result, start, index + 1, h_len - 1, true);
-            }
+                self.handle_parcours(exp_ref, &mut result, start, index + 1, h_len - 1, true);
+            };
+            (0..self.v_len).map(handle_row);
         }
 
         result
@@ -172,6 +176,7 @@ impl CrosswordMatrix {
 }
 
 mod test {
+
     use crate::{crossword_matrix::CrosswordMatrix, explorer::WordExplorer, radix_tree::RadixTree};
 
     #[test]
@@ -185,7 +190,6 @@ mod test {
         const STAIRS_DOWN_RIGHT_LEFT: &str = "oooXooMooAooSooo";
         const STAIRS_UP_LEFT_RIGHT: &str = "oooSooAooMooXooo";
         let tree = RadixTree::try_from_iter(["xmas"].iter()).expect("can't build the tree");
-        let mut explorer = WordExplorer::new(tree);
         let tests = [
             UP,
             DOWN,
@@ -198,7 +202,7 @@ mod test {
         ];
         for game in tests {
             let matrix = CrosswordMatrix::from_linear(4, 4, game).unwrap();
-            assert_eq!(matrix.solve(&mut explorer).len(), 1);
+            assert_eq!(matrix.solve(&tree).len(), 1);
         }
     }
 
@@ -206,16 +210,14 @@ mod test {
     fn test_solving_reel() {
         const TEST: &str = "ooXooooSAMXooAooAoXMASoSoXoooo";
         let tree = RadixTree::try_from_iter(["xmas"].iter()).expect("can't build the tree");
-        let mut explorer = WordExplorer::new(tree);
         let matrix = CrosswordMatrix::from_linear(6, 5, TEST).unwrap();
-        assert_eq!(matrix.solve(&mut explorer).len(), 4);
+        assert_eq!(matrix.solve(&tree).len(), 4);
     }
     #[test]
     fn solve_site_problem() {
         const TEST: &str = "MMMSXXMASMMSAMXMSMSAAMXSXMAAMMMSAMASMSMXXMASAMXAMMXXAMMXXAMASMSMSASXSSSAXAMASAAAMAMMMXMMMMMXMXAXMASX";
         let tree = RadixTree::try_from_iter(["xmas"].iter()).expect("can't build the tree");
-        let mut explorer = WordExplorer::new(tree);
         let matrix = CrosswordMatrix::from_linear(10, 10, TEST).unwrap();
-        assert_eq!(matrix.solve(&mut explorer).len(), 18);
+        assert_eq!(matrix.solve(&tree).len(), 18);
     }
 }

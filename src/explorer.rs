@@ -12,9 +12,9 @@ impl ExploreState {
         }
     }
 }
-pub struct WordExplorer {
+pub struct WordExplorer<'a> {
     inner_word: String,
-    tree: RadixTree,
+    tree: &'a RadixTree,
     word_state: ExploreState,
 }
 pub enum ExplorerResult {
@@ -23,8 +23,8 @@ pub enum ExplorerResult {
     Reset,
 }
 
-impl WordExplorer {
-    pub fn new(radix_tree: RadixTree) -> Self {
+impl<'a> WordExplorer<'a> {
+    pub fn new(radix_tree: &'a RadixTree) -> Self {
         Self {
             inner_word: String::new(),
             tree: radix_tree,
@@ -53,7 +53,7 @@ impl WordExplorer {
             ExplorerResult::PartialWord
         }
     }
-    pub fn get_word<'a>(&'a self) -> &'a str {
+    pub fn get_word<'b>(&'b self) -> &'b str {
         &self.inner_word
     }
     pub fn flush(&mut self) {
