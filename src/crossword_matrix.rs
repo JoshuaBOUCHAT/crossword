@@ -1,5 +1,10 @@
 use core::fmt;
-use std::ops::{Index, IndexMut};
+use std::{
+    collections::HashSet,
+    ops::{Index, IndexMut},
+};
+
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{explorer::WordExplorer, radix_tree::RadixTree};
 
@@ -95,7 +100,7 @@ impl CrosswordMatrix {
     fn handle_parcours(
         &self,
         explorer: &mut WordExplorer,
-        result: &mut Vec<String>,
+        result: &mut HashSet<String>,
         start: usize,
         stop: usize,
         step: usize,
@@ -108,7 +113,9 @@ impl CrosswordMatrix {
             for idx in (start..stop).step_by(step).rev() {
                 match explorer.explore_char(self[idx]) {
                     ExplorerResult::Reset => break,
-                    ExplorerResult::ValideWord => result.push(explorer.get_word().to_string()),
+                    ExplorerResult::ValideWord => {
+                        result.insert(explorer.get_word().to_string());
+                    }
                     ExplorerResult::PartialWord => {}
                 }
             }
@@ -116,68 +123,106 @@ impl CrosswordMatrix {
             for idx in (start..stop).step_by(step) {
                 match explorer.explore_char(self[idx]) {
                     ExplorerResult::Reset => break,
-                    ExplorerResult::ValideWord => result.push(explorer.get_word().to_string()),
+                    ExplorerResult::ValideWord => {
+                        result.insert(explorer.get_word().to_string());
+                    }
                     ExplorerResult::PartialWord => {}
                 }
             }
         }
     }
-
-    pub fn solve(&self, tree: &RadixTree) -> Vec<String> {
-        let mut result = vec![];
-        let total_len = self.total_len;
+    pub fn solve_row(
+        &self,
+        col: usize,
+        row: usize,
+        exp_ref: &mut WordExplorer,
+        result: &mut HashSet<String>,
+    ) {
         let h_len = self.h_len;
+        let v_len = self.v_len;
 
-        for col in 0..self.h_len {
-            let handle_row = |row| {
-                let mut row_explorer = WordExplorer::new(tree);
-                let exp_ref = &mut row_explorer;
+        let index = row * h_len + col;
 
-                let index = row * self.h_len + col;
+        //down
+        self.handle_parcours(exp_ref, result, index, h_len * v_len, h_len, false);
+        //right
+        let rg_stop = (row + 1) * h_len;
+        self.handle_parcours(exp_ref, result, index, rg_stop, 1, false);
 
-                //down
-                self.handle_parcours(exp_ref, &mut result, index, total_len, h_len, false);
-                //right
-                let rg_stop = (row + 1) * self.h_len;
-                self.handle_parcours(exp_ref, &mut result, index, rg_stop, 1, false);
+        //left
+        self.handle_parcours(exp_ref, result, row * h_len, index + 1, 1, true);
 
-                //left
-                self.handle_parcours(exp_ref, &mut result, row * h_len, index + 1, 1, true);
+        //up
+        self.handle_parcours(exp_ref, result, col, index + 1, h_len, true);
 
-                //up
-                self.handle_parcours(exp_ref, &mut result, col, index + 1, h_len, true);
+        //staire down left right
+        let max_iter = (h_len - col - 1).min(v_len - row - 1);
+        let stop = index + max_iter * (h_len + 1) + 1;
 
-                //staire down left right
-                let max_iter = (h_len - col - 1).min(self.v_len - row - 1);
-                let stop = index + max_iter * (self.h_len + 1) + 1;
+        self.handle_parcours(exp_ref, result, index, stop, h_len + 1, false);
 
-                self.handle_parcours(exp_ref, &mut result, index, stop, h_len + 1, false);
+        //staire up right left
+        let max_iter = col.min(row);
+        let start = index - (h_len + 1) * max_iter;
+        self.handle_parcours(exp_ref, result, start, index + 1, h_len + 1, true);
 
-                //staire up right left
-                let max_iter = col.min(row);
-                let start = index - (self.h_len + 1) * max_iter;
-                self.handle_parcours(exp_ref, &mut result, start, index + 1, h_len + 1, true);
+        //stair down right left
+        let max_iter = (v_len - 1 - row).min(col);
+        let stop = index + max_iter * (h_len - 1) + 1;
+        self.handle_parcours(exp_ref, result, index, stop, h_len - 1, false);
 
-                //stair down right left
-                let max_iter = (self.v_len - 1 - row).min(col);
-                let stop = index + max_iter * (h_len - 1) + 1;
-                self.handle_parcours(exp_ref, &mut result, index, stop, h_len - 1, false);
+        //staire up left right
+        let max_iter = (h_len - col).min(row);
+        let start = index - (h_len - 1) * max_iter;
+        self.handle_parcours(exp_ref, result, start, index + 1, h_len - 1, true);
+    }
 
-                //staire up left right
-                let max_iter = (h_len - col).min(row);
-                let start = index - (h_len - 1) * max_iter;
-                self.handle_parcours(exp_ref, &mut result, start, index + 1, h_len - 1, true);
-            };
-            (0..self.v_len).map(handle_row);
-        }
+    pub fn solve(&self, tree: &RadixTree) -> HashSet<String> {
+        let h_len = self.h_len;
+        let v_len = self.v_len;
 
-        result
+        // On divise les colonnes en chunks pour paralléliser proprement
+        let n_threads = std::thread::available_parallelism()
+            .map(|n| n.get() * 2)
+            .unwrap_or(1);
+
+        let col_chunks = chunked_range_by_count(0..h_len, n_threads).collect::<Vec<_>>();
+
+        col_chunks
+            .into_par_iter()
+            .flat_map(|col_range| {
+                let mut local_results = HashSet::new();
+                let mut explorer = WordExplorer::new(tree);
+
+                for col in col_range {
+                    for row in 0..v_len {
+                        self.solve_row(col, row, &mut explorer, &mut local_results);
+                    }
+                }
+
+                local_results
+            })
+            .collect()
     }
 }
 
+fn chunked_range_by_count(
+    range: std::ops::Range<usize>,
+    n_chunks: usize,
+) -> impl Iterator<Item = std::ops::Range<usize>> {
+    let len = range.end - range.start;
+    let base_size = len / n_chunks;
+    let remainder = len % n_chunks;
+
+    (0..n_chunks).map(move |i| {
+        let start = range.start + i * base_size + remainder.min(i);
+        let end = start + base_size + if i < remainder { 1 } else { 0 };
+        start..end
+    })
+}
 mod test {
 
-    use crate::{crossword_matrix::CrosswordMatrix, explorer::WordExplorer, radix_tree::RadixTree};
+    use crate::{crossword_matrix::CrosswordMatrix, radix_tree::RadixTree};
 
     #[test]
     fn test_soling() {

@@ -1,13 +1,13 @@
 use std::{collections::HashSet, time::Instant};
 
-use crate::{ crossword_matrix::CrosswordMatrix, radix_tree::RadixTree};
+use crate::{crossword_matrix::CrosswordMatrix, radix_tree::RadixTree};
 use rand::Rng;
 mod crossword_matrix;
 mod explorer;
 pub mod radix_tree;
 
 const LIST: &str = include_str!("../list.txt");
-const N: usize = 10000;
+const N: usize = 31623;
 
 fn main() {
     let tree = RadixTree::try_from_iter(LIST.split('\n')).expect("can't build the tree");
@@ -15,14 +15,13 @@ fn main() {
     let matrix = CrosswordMatrix::from_linear(N, N, grid).unwrap();
     let now = Instant::now();
     let result = matrix.solve(&tree);
-    let final_result: HashSet<String> = HashSet::from_iter(result.into_iter());
     let needed_time = now.elapsed().as_secs_f32();
-    for word in &final_result {
+    /*for word in &result {
         print!("{word} ");
-    }
+    }*/
     println!(
         "\n nombre total de mots: {} trouvé en seulement {}s",
-        final_result.len(),
+        result.len(),
         needed_time
     )
 }
