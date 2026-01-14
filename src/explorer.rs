@@ -1,13 +1,13 @@
-use crate::radix_tree::{RadixTree, validate_char};
+use crate::radix_tree::{CharIndex, RadixTree};
 #[derive(Default, Debug, Clone, Copy)]
 pub struct ExploreState {
-    is_valide_word: bool,
+    is_valid_word: bool,
     index: u32,
 }
 impl ExploreState {
-    pub fn new(is_valide_word: bool, index: u32) -> Self {
+    pub fn new(is_valid_word: bool, index: u32) -> Self {
         Self {
-            is_valide_word,
+            is_valid_word,
             index,
         }
     }
@@ -18,7 +18,7 @@ pub struct WordExplorer<'a> {
     word_state: ExploreState,
 }
 pub enum ExplorerResult {
-    ValideWord,
+    ValidWord,
     PartialWord,
     Reset,
 }
@@ -32,23 +32,21 @@ impl<'a> WordExplorer<'a> {
         }
     }
     pub fn explore_char(&mut self, c: char) -> ExplorerResult {
-        let valide_char = validate_char(c).expect(&format!(
-            "Char {c} passed by parameter is inivalide only letter are accepted"
-        ));
-        let maybe_new_state = self
-            .tree
-            .explore_char_unchecked(self.word_state.index as usize, valide_char);
-
-        if let Some(new_state) = maybe_new_state {
-            self.word_state = new_state;
-            self.inner_word.push(valide_char);
-        } else {
+        let Some(char_idx) = CharIndex::new(c) else {
             self.flush();
             return ExplorerResult::Reset;
-        }
+        };
 
-        if self.word_state.is_valide_word {
-            ExplorerResult::ValideWord
+        let Some(new_state) = self.tree.explore(self.word_state.index as usize, char_idx) else {
+            self.flush();
+            return ExplorerResult::Reset;
+        };
+
+        self.word_state = new_state;
+        self.inner_word.push(char_idx.as_char());
+
+        if self.word_state.is_valid_word {
+            ExplorerResult::ValidWord
         } else {
             ExplorerResult::PartialWord
         }

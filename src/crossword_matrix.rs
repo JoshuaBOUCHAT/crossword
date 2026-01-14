@@ -13,7 +13,6 @@ pub struct CrosswordMatrix {
     inner: Vec<char>,
     h_len: usize,
     v_len: usize,
-    total_len: usize,
 }
 #[derive(Debug, Clone)]
 pub enum CrosswordMatrixError {
@@ -60,7 +59,7 @@ impl CrosswordMatrix {
         Ok(Self {
             h_len,
             v_len,
-            total_len,
+
             inner: letters.chars().collect(),
         })
     }
@@ -79,7 +78,7 @@ impl CrosswordMatrix {
         Ok(Self {
             h_len,
             v_len,
-            total_len,
+
             inner,
         })
     }
@@ -113,7 +112,7 @@ impl CrosswordMatrix {
             for idx in (start..stop).step_by(step).rev() {
                 match explorer.explore_char(self[idx]) {
                     ExplorerResult::Reset => break,
-                    ExplorerResult::ValideWord => {
+                    ExplorerResult::ValidWord => {
                         result.insert(explorer.get_word().to_string());
                     }
                     ExplorerResult::PartialWord => {}
@@ -123,7 +122,7 @@ impl CrosswordMatrix {
             for idx in (start..stop).step_by(step) {
                 match explorer.explore_char(self[idx]) {
                     ExplorerResult::Reset => break,
-                    ExplorerResult::ValideWord => {
+                    ExplorerResult::ValidWord => {
                         result.insert(explorer.get_word().to_string());
                     }
                     ExplorerResult::PartialWord => {}
@@ -131,6 +130,7 @@ impl CrosswordMatrix {
             }
         }
     }
+    #[inline(always)]
     pub fn solve_row(
         &self,
         col: usize,

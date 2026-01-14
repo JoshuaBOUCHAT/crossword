@@ -2,51 +2,68 @@ use std::ops::{Index, IndexMut};
 
 use crate::explorer::ExploreState;
 
+const NO_NODE: u32 = u32::MAX;
 #[derive(Debug)]
 pub struct TreeNode {
-    is_valide_word: bool,
+    is_valid_word: bool,
     branches: [u32; 26],
 }
 impl Default for TreeNode {
     fn default() -> Self {
         Self {
-            is_valide_word: false,
-            branches: [u32::MAX; 26],
+            is_valid_word: false,
+            branches: [NO_NODE; 26],
         }
     }
 }
 
 #[derive(Debug)]
+#[repr(transparent)]
 pub struct RadixTree {
     nodes: Vec<TreeNode>,
 }
 
 impl Index<usize> for RadixTree {
     type Output = TreeNode;
-
+    #[inline(always)]
     fn index(&self, index: usize) -> &Self::Output {
-        &self.nodes[index]
+        unsafe { self.nodes.get_unchecked(index) }
     }
 }
 impl IndexMut<usize> for RadixTree {
+    #[inline(always)]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.nodes[index]
+        unsafe { self.nodes.get_unchecked_mut(index) }
     }
 }
-#[inline]
-fn char_to_index(c: char) -> usize {
-    (c as u8 - b'a') as usize
-}
-pub fn validate_char(c: char) -> Result<char, String> {
-    match c {
-        c_lower_case @ 'a'..='z' => Ok(c_lower_case),
-        c_upper_case @ 'A'..='Z' => Ok(c_upper_case.to_ascii_lowercase()),
-        c => {
-            return Err(format!(
-                "The char you gave contain invalide character: {}",
-                c
-            ));
+/// Newtype garantissant un index valide (0-25) pour les branches du radix tree.
+/// La validation se fait à la construction, éliminant le besoin de vérifications ultérieures.
+#[derive(Debug, Clone, Copy)]
+#[repr(transparent)]
+pub struct CharIndex(u8);
+
+impl CharIndex {
+    /// Crée un CharIndex à partir d'un caractère alphabétique.
+    /// Retourne None si le caractère n'est pas une lettre ASCII.
+    #[inline]
+    pub fn new(c: char) -> Option<Self> {
+        match c {
+            'a'..='z' => Some(Self(c as u8 - b'a')),
+            'A'..='Z' => Some(Self(c as u8 - b'A')),
+            _ => None,
         }
+    }
+
+    /// Retourne l'index (0-25) pour accéder aux branches.
+    #[inline]
+    pub fn as_usize(self) -> usize {
+        self.0 as usize
+    }
+
+    /// Retourne le caractère minuscule correspondant.
+    #[inline]
+    pub fn as_char(self) -> char {
+        (self.0 + b'a') as char
     }
 }
 
@@ -70,35 +87,41 @@ impl RadixTree {
     }
     fn insert_node(&mut self, node: TreeNode) -> usize {
         let new_tree_node_index = self.len();
-        assert!(new_tree_node_index != u32::MAX as usize);
+        assert!(new_tree_node_index != NO_NODE as usize);
         self.nodes.push(node);
         new_tree_node_index
     }
     pub fn add_word(&mut self, word: &str) -> Result<(), String> {
         let mut actual = 0;
-        for char in word.chars() {
-            let valide_char = validate_char(char)?;
-            let char_idx = char_to_index(valide_char);
-            actual = if self[actual].branches[char_idx] == u32::MAX {
+        for c in word.chars() {
+            let char_idx = CharIndex::new(c)
+                .ok_or_else(|| format!("The char you gave contains invalid character: {}", c))?;
+            let idx = char_idx.as_usize();
+            actual = if self[actual].branches[idx] == NO_NODE {
                 let new_inserted_index = self.insert_node(TreeNode::default());
-                self[actual].branches[char_idx] = new_inserted_index as u32;
+                self[actual].branches[idx] = new_inserted_index as u32;
                 new_inserted_index
             } else {
-                self[actual].branches[char_idx] as usize
+                self[actual].branches[idx] as usize
             }
         }
-        self[actual].is_valide_word = true;
+        self[actual].is_valid_word = true;
         Ok(())
     }
-    pub fn explore_char_unchecked(&self, index: usize, explore_char: char) -> Option<ExploreState> {
-        let explore_char_index = char_to_index(explore_char);
-        if self[index].branches[explore_char_index] == u32::MAX {
+
+    /// Explore une branche du radix tree avec un CharIndex garanti valide.
+    /// Retourne None si la branche n'existe pas.
+    ///
+    #[inline(always)]
+    pub fn explore(&self, node_index: usize, char_idx: CharIndex) -> Option<ExploreState> {
+        let branch_idx = char_idx.as_usize();
+        let next_node = self[node_index].branches[branch_idx];
+        if next_node == NO_NODE {
             return None;
         }
-        let index = self[index].branches[explore_char_index];
         Some(ExploreState::new(
-            self[index as usize].is_valide_word,
-            index,
+            self[next_node as usize].is_valid_word,
+            next_node,
         ))
     }
 }

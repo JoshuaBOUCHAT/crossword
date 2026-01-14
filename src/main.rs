@@ -1,13 +1,14 @@
-use std::{collections::HashSet, time::Instant};
+use std::{cmp::Ordering, time::Instant};
 
 use crate::{crossword_matrix::CrosswordMatrix, radix_tree::RadixTree};
+use itertools::Itertools;
 use rand::Rng;
 mod crossword_matrix;
 mod explorer;
 pub mod radix_tree;
 
 const LIST: &str = include_str!("../list.txt");
-const N: usize = 31623;
+const N: usize = 50000;
 
 fn main() {
     let tree = RadixTree::try_from_iter(LIST.split('\n')).expect("can't build the tree");
@@ -23,7 +24,19 @@ fn main() {
         "\n nombre total de mots: {} trouvé en seulement {}s",
         result.len(),
         needed_time
-    )
+    );
+    let bigests_iter = result.into_iter().sorted_by(sort_string).take(32);
+    for bigest in bigests_iter {
+        println!("{bigest}")
+    }
+}
+
+fn sort_string(string1: &String, string2: &String) -> Ordering {
+    let ord = string2.len().cmp(&string1.len());
+    if !ord.is_eq() {
+        return ord;
+    }
+    string2.cmp(string1)
 }
 
 fn random_lowwercase(len: usize) -> String {
@@ -35,7 +48,7 @@ fn random_lowwercase(len: usize) -> String {
 
 const XMAS: &str = include_str!("../input.txt");
 
-fn xmas_solving() {
+fn _xmas_solving() {
     let tree = RadixTree::try_from_iter(["xmas"].iter()).expect("can't build the tree");
     let rows: Vec<&str> = XMAS.lines().collect();
     let matrix = CrosswordMatrix::from_row(rows.as_slice()).expect("Matrix initialisation failed");
